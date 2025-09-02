@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bản đồ Nhóm Nhạc Hội (Firebase)</title>
+    <title>Bản đồ Nhóm Nhạc Hội (Realtime DB)</title>
     <!-- CSS của Leaflet & MarkerCluster -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
@@ -61,7 +61,7 @@
         <button id="zoom-to-all" title="Xem tất cả mọi người">👨‍👩‍👧‍👦</button>
     </div>
 
-    <!-- SDK của Leaflet & MarkerCluster (vẫn giữ nguyên) -->
+    <!-- SDK của Leaflet & MarkerCluster -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
@@ -69,11 +69,10 @@
     <script type="module">
         // Import các hàm cần thiết từ Firebase SDK
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+        import { getDatabase, ref, onValue, set, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 
         // --- PHẦN 1: CẤU HÌNH FIREBASE ---
-        // Cấu hình Firebase đã được cập nhật theo thông tin bạn cung cấp
         const firebaseConfig = {
             apiKey: "AIzaSyDn-3B1ZNCq9E9XuNoHHHiyIo_Pegy8Ogk",
             authDomain: "ailocal-7501e.firebaseapp.com",
@@ -86,9 +85,9 @@
 
         // --- PHẦN 2: KHỞI TẠO ỨNG DỤNG ---
         const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        const db = getDatabase(app);
         const auth = getAuth(app);
-        const locationsRef = collection(db, 'locations');
+        const locationsRef = ref(db, 'locations');
 
         const notificationBar = document.getElementById('notification-bar');
         const zoomToMeBtn = document.getElementById('zoom-to-me');
@@ -150,37 +149,36 @@
                 const userName = prompt("Nhập tên của bạn:", "Tôi") || "Người dùng ẩn danh";
                 showNotification("Kết nối thành công! Đang lấy vị trí của bạn...");
                 
-                // Lắng nghe thay đổi vị trí của mọi người, CÓ xử lý lỗi
-                onSnapshot(locationsRef, 
+                onValue(locationsRef, 
                     (snapshot) => {
-                        snapshot.docChanges().forEach(change => {
-                            const docData = change.doc.data();
-                            const docId = change.doc.id;
+                        const locations = snapshot.val() || {};
+                        const currentlyTracked = Object.keys(markers);
+                        const allOnlineUsers = Object.keys(locations);
 
-                            if (change.type === "added" || change.type === "modified") {
-                                if (docId !== currentUserId) {
-                                    updateMarker(docId, docData.name, docData.lat, docData.lng);
-                                }
-                            } else if (change.type === "removed") {
-                                removeMarker(docId);
+                        currentlyTracked.forEach(userId => {
+                            if (!allOnlineUsers.includes(userId)) {
+                                removeMarker(userId);
+                            }
+                        });
+                        
+                        allOnlineUsers.forEach(userId => {
+                            if (userId !== currentUserId) {
+                                const userData = locations[userId];
+                                updateMarker(userId, userData.name, userData.lat, userData.lng);
                             }
                         });
                     },
-                    (error) => { // Xử lý lỗi từ onSnapshot
-                        console.error("Lỗi Firestore Snapshot:", error);
-                        if (error.code === 'permission-denied') {
-                            showNotification("Lỗi quyền truy cập! Vui lòng kiểm tra Cài đặt Security Rules trong Firebase Console.", true);
-                        } else {
-                            showNotification("Lỗi kết nối Firestore.", true);
-                        }
+                    (error) => {
+                        console.error("Lỗi Realtime Database:", error);
+                        // Cải thiện thông báo lỗi để hướng dẫn người dùng
+                        showNotification("Lỗi quyền truy cập CSDL. Vui lòng kiểm tra Security Rules trong Firebase.", true);
                     }
                 );
 
                 startWatchingLocation(userName);
 
-                window.addEventListener('beforeunload', () => {
-                    deleteDoc(doc(db, 'locations', currentUserId));
-                });
+                const userLocationRef = ref(db, 'locations/' + currentUserId);
+                onDisconnect(userLocationRef).remove();
 
             })
             .catch((error) => {
@@ -206,31 +204,24 @@
                         map.setView(currentUserLocation, 17);
                         isFirstUpdate = false;
                     }
-
+                    
+                    const userLocationRef = ref(db, 'locations/' + currentUserId);
                     const locationData = {
                         name: userName,
                         lat: latitude,
                         lng: longitude,
                         timestamp: serverTimestamp()
                     };
-                    await setDoc(doc(db, 'locations', currentUserId), locationData, { merge: true });
+                    await set(userLocationRef, locationData);
                 },
-                (error) => { // Cải thiện thông báo lỗi vị trí
+                (error) => {
                     console.error("Lỗi vị trí:", error);
                     let message = "Không thể lấy vị trí của bạn. ";
                     switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            message += "Bạn đã từ chối quyền truy cập.";
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            message += "Thông tin vị trí không có sẵn.";
-                            break;
-                        case error.TIMEOUT:
-                            message += "Yêu cầu đã hết hạn.";
-                            break;
-                        default:
-                            message += "Đã có lỗi không xác định xảy ra.";
-                            break;
+                        case error.PERMISSION_DENIED: message += "Bạn đã từ chối quyền truy cập."; break;
+                        case error.POSITION_UNAVAILABLE: message += "Thông tin vị trí không có sẵn."; break;
+                        case error.TIMEOUT: message += "Yêu cầu đã hết hạn."; break;
+                        default: message += "Đã có lỗi không xác định xảy ra."; break;
                     }
                     showNotification(message, true);
                 },
