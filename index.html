@@ -6,6 +6,9 @@
     <title>Bản đồ Nhóm Nhạc Hội</title>
     <!-- Nhúng CSS của Leaflet từ CDN -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Nhúng CSS cho thư viện gom nhóm Marker -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     
     <!-- CSS nội bộ cho ứng dụng -->
     <style>
@@ -112,6 +115,8 @@
 
     <!-- Nhúng JavaScript của Leaflet từ CDN -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Nhúng JavaScript cho thư viện gom nhóm Marker -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
     <!-- JavaScript nội bộ cho ứng dụng -->
     <script>
@@ -121,7 +126,6 @@
         const zoomToMeBtn = document.getElementById('zoom-to-me');
         const zoomToAllBtn = document.getElementById('zoom-to-all');
 
-        // Hàm hiển thị thông báo
         function showNotification(message) {
             notificationBar.textContent = message;
             notificationBar.classList.add('show');
@@ -138,7 +142,11 @@
         }).addTo(map);
 
         const markers = {};
-        let currentUserLocation = null; // Biến lưu vị trí hiện tại của người dùng
+        let currentUserLocation = null;
+
+        // Tạo một lớp layer để gom nhóm các marker
+        const markersLayer = L.markerClusterGroup();
+        map.addLayer(markersLayer); // Thêm lớp gom nhóm vào bản đồ
 
         // --- PHẦN 2: XỬ LÝ VỊ TRÍ CỦA BẠN ---
 
@@ -158,11 +166,16 @@
             }
 
             if (markers[id]) {
+                // Nếu marker đã tồn tại, chỉ cập nhật vị trí
                 markers[id].setLatLng([lat, lng]);
             } else {
-                markers[id] = L.marker([lat, lng], markerOptions).addTo(map)
-                    .bindPopup(popupContent)
-                    .openPopup();
+                // Nếu chưa, tạo marker mới
+                const newMarker = L.marker([lat, lng], markerOptions).bindPopup(popupContent);
+                markers[id] = newMarker; // Lưu lại để cập nhật sau
+                
+                // Thêm marker mới vào lớp gom nhóm thay vì bản đồ trực tiếp
+                markersLayer.addLayer(newMarker);
+                newMarker.openPopup();
             }
         }
         
@@ -172,7 +185,7 @@
             navigator.geolocation.watchPosition(
                 (position) => {
                     const { latitude, longitude } = position.coords;
-                    currentUserLocation = [latitude, longitude]; // Cập nhật vị trí mới nhất
+                    currentUserLocation = [latitude, longitude];
 
                     updateMarker(userName, latitude, longitude, true);
 
@@ -180,9 +193,6 @@
                         map.setView(currentUserLocation, 17);
                         isFirstLocationUpdate = false;
                     }
-
-                    // --- PHẦN 3: GỬI VÀ NHẬN DỮ LIỆU ---
-                    /* ... */
                 },
                 (error) => {
                     console.error("Lỗi khi lấy vị trí:", error);
@@ -198,39 +208,35 @@
             showNotification("Trình duyệt của bạn không hỗ trợ định vị.");
         }
         
-        // --- PHẦN 4: THÊM SỰ KIỆN CHO CÁC NÚT ĐIỀU KHIỂN ---
+        // --- PHẦN 3: THÊM SỰ KIỆN CHO CÁC NÚT ĐIỀU KHIỂN ---
 
-        // Sự kiện cho nút "Zoom về vị trí của tôi"
         zoomToMeBtn.addEventListener('click', () => {
             if (currentUserLocation) {
-                map.setView(currentUserLocation, 17); // Zoom gần
+                map.setView(currentUserLocation, 17);
             } else {
                 showNotification("Chưa có thông tin vị trí của bạn.");
             }
         });
 
-        // Sự kiện cho nút "Xem tất cả mọi người"
         zoomToAllBtn.addEventListener('click', () => {
-            const markerGroup = L.featureGroup(Object.values(markers));
-            if (Object.keys(markers).length > 0) {
-                // Thêm một chút padding để các marker không bị sát viền
-                map.fitBounds(markerGroup.getBounds().pad(0.2));
+            // Lớp gom nhóm có thể cung cấp vùng bao của tất cả các marker
+            if (markersLayer.getLayers().length > 0) {
+                map.fitBounds(markersLayer.getBounds().pad(0.2));
             } else {
                 showNotification("Chưa có vị trí của ai trên bản đồ.");
             }
         });
 
-
-        /*
-        TRONG MỘT ỨNG DỤNG THỰC TẾ, BẠN SẼ CÓ MỘT ĐOẠN MÃ NHƯ SAU:
-        ...
-        */
-
-        // --- PHẦN 5: MÔ PHỎNG DỮ LIỆU BẠN BÈ ---
+        // --- PHẦN 4: MÔ PHỎNG DỮ LIỆU BẠN BÈ ---
         function simulateFriends() {
             console.log("Mô phỏng vị trí bạn bè...");
+            // Các bạn bè ban đầu
             updateMarker("Anh A", 21.0288, 105.8525, false);
             updateMarker("Chị B", 21.0275, 105.8550, false);
+            
+            // Thêm vài người bạn đứng gần Anh A để kiểm tra tính năng gom nhóm
+            updateMarker("Bạn C", 21.0289, 105.8526, false);
+            updateMarker("Bạn D", 21.0287, 105.8524, false);
         }
 
         setTimeout(simulateFriends, 3000);
