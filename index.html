@@ -50,13 +50,64 @@
             background-color: transparent; border: none; box-shadow: none;
             font-weight: bold; font-size: 12px; color: #1a1a1a;
             text-shadow: -1px -1px 0 #FFF, 1px -1px 0 #FFF, -1px 1px 0 #FFF, 1px 1px 0 #FFF;
-            text-align: center; /* Căn giữa cho tooltip nhiều dòng */
+            text-align: center;
         }
 
         /* Style cho marker offline */
         .marker-offline {
             opacity: 0.6 !important;
             filter: grayscale(80%);
+        }
+
+        /* --- STYLES MỚI CHO MARKER VÀ CLUSTER --- */
+
+        /* Style cho marker của bạn (hiệu ứng pulse) */
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 12px rgba(0, 123, 255, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 123, 255, 0); }
+        }
+        .my-div-icon svg {
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            overflow: visible; /* Để shadow không bị cắt */
+        }
+
+        /* Style cho marker của bạn bè */
+        .friend-div-icon svg {
+            border-radius: 50%;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.7);
+        }
+        
+        /* Style cho gom nhóm (Marker Cluster) */
+        .marker-cluster-small { background-color: rgba(24, 167, 105, 0.6); }
+        .marker-cluster-small div { background-color: rgba(24, 167, 105, 0.9); }
+
+        .marker-cluster-medium { background-color: rgba(240, 194, 12, 0.6); }
+        .marker-cluster-medium div { background-color: rgba(241, 196, 15, 0.9); }
+
+        .marker-cluster-large { background-color: rgba(241, 128, 23, 0.6); }
+        .marker-cluster-large div { background-color: rgba(241, 128, 23, 0.9); }
+
+        .marker-cluster {
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            transition: background-color 0.3s;
+            border: 2px solid white;
+        }
+        .marker-cluster div {
+            width: 30px;
+            height: 30px;
+            margin-left: 3px;
+            margin-top: 3px;
+            text-align: center;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            line-height: 30px;
         }
     </style>
 </head>
@@ -118,11 +169,19 @@
         const markersLayer = L.markerClusterGroup();
         map.addLayer(markersLayer);
 
+        // --- CÁC BIỂU TƯỢNG MỚI ---
         const myIcon = L.divIcon({
             className: 'my-div-icon',
             html: `<svg viewBox="0 0 24 24" width="32" height="32" fill="#007bff" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`,
             iconSize: [32, 32],
             iconAnchor: [16, 16]
+        });
+
+        const friendIcon = L.divIcon({
+            className: 'friend-div-icon',
+            html: `<svg viewBox="0 0 24 24" width="28" height="28" fill="#18a769" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
         });
 
         // --- PHẦN 3: HÀM TIỆN ÍCH & CẬP NHẬT MARKER ---
@@ -148,7 +207,8 @@
             let marker = markers[id];
 
             if (!marker) {
-                const markerOptions = isCurrentUser ? { icon: myIcon } : {};
+                const iconToUse = isCurrentUser ? myIcon : friendIcon; // Dùng icon tương ứng
+                const markerOptions = { icon: iconToUse };
                 marker = L.marker([lat, lng], markerOptions);
                 markers[id] = marker;
                 markersLayer.addLayer(marker);
@@ -156,7 +216,6 @@
                 marker.setLatLng([lat, lng]);
             }
             
-            // Cập nhật tooltip
             let tooltipContent = `<b>${name}</b>`;
             if (isOffline) {
                 tooltipContent += `<br><small>Lần cuối: ${formatTimeAgo(timestamp)}</small>`;
@@ -169,7 +228,6 @@
                 });
             }
 
-            // Cập nhật giao diện offline
             const iconElement = marker._icon;
             if (iconElement) {
                 if (isOffline) {
@@ -201,22 +259,18 @@
                         const allUserIdsInDb = Object.keys(locations);
                         const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
 
-                        // Xóa marker của người dùng đã bị xóa khỏi DB
                         currentlyTracked.forEach(userId => {
                             if (!allUserIdsInDb.includes(userId)) {
                                 removeMarker(userId);
                             }
                         });
                         
-                        // Cập nhật hoặc thêm marker
                         allUserIdsInDb.forEach(userId => {
                             const userData = locations[userId];
-                            // Tự động dọn dẹp người dùng offline quá 24 giờ
                             if (userData.status === 'offline' && userData.timestamp < oneDayAgo) {
                                 remove(ref(db, 'locations/' + userId));
                                 return;
                             }
-                            // Không cập nhật marker của chính mình từ DB
                             if (userId !== currentUserId) {
                                 updateMarker(userId, userData);
                             }
@@ -230,7 +284,6 @@
 
                 startWatchingLocation(userName);
 
-                // Khi ngắt kết nối, cập nhật trạng thái thành offline và ghi lại timestamp
                 const userLocationRef = ref(db, 'locations/' + currentUserId);
                 onDisconnect(userLocationRef).update({ 
                     status: 'offline',
@@ -261,10 +314,9 @@
                         lat: latitude,
                         lng: longitude,
                         timestamp: serverTimestamp(),
-                        status: 'online' // Luôn cập nhật trạng thái là online
+                        status: 'online'
                     };
                     
-                    // Cập nhật marker của chính mình ngay lập tức
                     updateMarker(currentUserId, locationData);
 
                     if (isFirstUpdate) {
@@ -281,12 +333,7 @@
                     switch(error.code) {
                         case error.PERMISSION_DENIED: message += "Bạn đã từ chối quyền truy cập."; break;
                         case error.POSITION_UNAVAILABLE: message += "Thông tin vị trí không có sẵn."; break;
-                        case error.TIMEOUT: message += "Yêu cầu đã hết hạn."; break;
-                        default: message += "Đã có lỗi không xác định xảy ra."; break;
-                    }
-                    showNotification(message, true);
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+aximumAge: 0 }
             );
         }
 
@@ -298,16 +345,13 @@
 
         zoomToAllBtn.addEventListener('click', () => {
             const onlineMarkers = Object.values(markers).filter(m => {
-                // Chỉ zoom vào các marker không phải offline
                 return !m._icon.classList.contains('marker-offline');
             });
 
             if (onlineMarkers.length > 0) {
-                 // Tạo một layer group tạm thời để tính toán bounds
                 const onlineGroup = L.featureGroup(onlineMarkers);
                 map.fitBounds(onlineGroup.getBounds().pad(0.2));
             } else if (markersLayer.getLayers().length > 0) {
-                // Nếu không có ai online, zoom vào tất cả
                 map.fitBounds(markersLayer.getBounds().pad(0.2));
             }
             else {
