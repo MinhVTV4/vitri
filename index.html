@@ -3,163 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bản đồ Nhóm Nhạc Hội</title>
-    <!-- Nhúng CSS của Leaflet từ CDN -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <!-- Nhúng CSS cho thư viện gom nhóm Marker -->
+    <title>Bản đồ Nhóm Nhạc Hội (Firebase)</title>
+    <!-- CSS của Leaflet & MarkerCluster -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     
-    <!-- CSS nội bộ cho ứng dụng -->
     <style>
-        /* Reset CSS mặc định và đảm bảo bản đồ toàn màn hình */
+        /* Reset CSS và style cơ bản */
         html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
+            height: 100%; margin: 0; padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            overflow: hidden; /* Tránh thanh cuộn không cần thiết */
+            overflow: hidden;
         }
+        #map { width: 100%; height: 100%; background-color: #eaf0f5; }
 
-        #map {
-            width: 100%;
-            height: 100%;
-            background-color: #eaf0f5;
-        }
-
-        /* Thanh thông báo lỗi */
+        /* Thanh thông báo */
         #notification-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            background-color: #d9534f;
-            color: white;
-            text-align: center;
-            padding: 12px;
-            z-index: 1001; /* Đảm bảo nó hiển thị trên bản đồ */
-            font-size: 14px;
+            position: fixed; top: 0; left: 0; width: 100%;
+            background-color: #5bc0de; color: white; text-align: center;
+            padding: 12px; z-index: 1001; font-size: 14px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
             transform: translateY(-100%);
             transition: transform 0.3s ease-in-out;
         }
-        #notification-bar.show {
-            transform: translateY(0);
-        }
-
-        /* Tùy chỉnh popup của Leaflet cho đẹp hơn */
-        .leaflet-popup-content-wrapper {
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-
-        .leaflet-popup-content {
-            margin: 13px 19px;
-            font-size: 14px;
-            font-weight: 500;
-        }
+        #notification-bar.error { background-color: #d9534f; }
+        #notification-bar.show { transform: translateY(0); }
         
-        .leaflet-popup-tip {
-             background: white;
-        }
-
-        /* Container cho các nút điều khiển */
+        /* Nút điều khiển */
         .map-controls {
-            position: fixed;
-            top: 15px; /* Đã thay đổi từ bottom */
-            right: 15px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            position: fixed; top: 15px; right: 15px;
+            z-index: 1000; display: flex; flex-direction: column; gap: 10px;
         }
-
-        /* Kiểu dáng cho các nút điều khiển */
         .map-controls button {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background-color: white;
-            border: 1px solid #ddd;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-            cursor: pointer;
-            font-size: 24px;
-            line-height: 50px;
-            text-align: center;
+            width: 50px; height: 50px; border-radius: 50%;
+            background-color: white; border: 1px solid #ddd;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15); cursor: pointer;
+            font-size: 24px; line-height: 50px; text-align: center;
             transition: background-color 0.2s, transform 0.1s;
         }
+        .map-controls button:hover { background-color: #f7f7f7; }
+        .map-controls button:active { transform: scale(0.95); }
 
-        .map-controls button:hover {
-            background-color: #f7f7f7;
-        }
-
-        .map-controls button:active {
-            transform: scale(0.95);
-            background-color: #f0f0f0;
-        }
-
-        /* Tùy chỉnh tooltip để tên luôn hiển thị */
+        /* Tooltip tên */
         .custom-tooltip {
-            background-color: transparent;
-            border: none;
-            box-shadow: none;
-            font-weight: bold;
-            font-size: 12px;
-            color: #1a1a1a;
-            /* Thêm viền chữ để dễ đọc trên mọi nền bản đồ */
+            background-color: transparent; border: none; box-shadow: none;
+            font-weight: bold; font-size: 12px; color: #1a1a1a;
             text-shadow: -1px -1px 0 #FFF, 1px -1px 0 #FFF, -1px 1px 0 #FFF, 1px 1px 0 #FFF;
         }
     </style>
 </head>
 <body>
-
-    <!-- Thanh thông báo lỗi -->
-    <div id="notification-bar"></div>
-
-    <!-- Thẻ div này sẽ là nơi bản đồ được hiển thị -->
+    <div id="notification-bar">Đang kết nối...</div>
     <div id="map"></div>
-
-    <!-- Các nút điều khiển bản đồ -->
     <div class="map-controls">
         <button id="zoom-to-me" title="Zoom về vị trí của tôi">👤</button>
         <button id="zoom-to-all" title="Xem tất cả mọi người">👨‍👩‍👧‍👦</button>
     </div>
 
-    <!-- Nhúng JavaScript của Leaflet từ CDN -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- Nhúng JavaScript cho thư viện gom nhóm Marker -->
+    <!-- SDK của Leaflet & MarkerCluster (vẫn giữ nguyên) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
-    <!-- JavaScript nội bộ cho ứng dụng -->
-    <script>
-        // --- PHẦN 1: KHỞI TẠO VÀ CẤU HÌNH ---
+    <!-- Sử dụng script type="module" cho Firebase SDK v12+ -->
+    <script type="module">
+        // Import các hàm cần thiết từ Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+
+        // --- PHẦN 1: CẤU HÌNH FIREBASE ---
+        // Cấu hình Firebase đã được cập nhật theo thông tin bạn cung cấp
+        const firebaseConfig = {
+            apiKey: "AIzaSyDn-3B1ZNCq9E9XuNoHHHiyIo_Pegy8Ogk",
+            authDomain: "ailocal-7501e.firebaseapp.com",
+            databaseURL: "https://ailocal-7501e-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "ailocal-7501e",
+            storageBucket: "ailocal-7501e.appspot.com",
+            messagingSenderId: "21856417488",
+            appId: "1:21856417488:web:c3542543f12cab547b90d5"
+        };
+
+        // --- PHẦN 2: KHỞI TẠO ỨNG DỤNG ---
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const locationsRef = collection(db, 'locations');
 
         const notificationBar = document.getElementById('notification-bar');
         const zoomToMeBtn = document.getElementById('zoom-to-me');
         const zoomToAllBtn = document.getElementById('zoom-to-all');
 
-        function showNotification(message) {
+        function showNotification(message, isError = false) {
             notificationBar.textContent = message;
+            notificationBar.classList.toggle('error', isError);
             notificationBar.classList.add('show');
-            setTimeout(() => {
-                notificationBar.classList.remove('show');
-            }, 5000);
+            setTimeout(() => { notificationBar.classList.remove('show'); }, 5000);
         }
 
-        const userName = prompt("Nhập tên của bạn để hiển thị trên bản đồ:", "Tôi") || "Người dùng ẩn danh";
         const map = L.map('map').setView([21.0285, 105.8542], 16);
-
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
         const markers = {};
+        let currentUserId = null;
         let currentUserLocation = null;
-
         const markersLayer = L.markerClusterGroup();
         map.addLayer(markersLayer);
-
-        // --- PHẦN 2: XỬ LÝ VỊ TRÍ CỦA BẠN ---
 
         const myIcon = L.divIcon({
             className: 'my-div-icon',
@@ -168,92 +119,135 @@
             iconAnchor: [16, 16]
         });
 
-        function updateMarker(id, lat, lng, isCurrentUser = false) {
-            const tooltipContent = `<b>${id}</b>`;
-            const markerOptions = {};
-            if (isCurrentUser) {
-                markerOptions.icon = myIcon;
-            }
-
-            const tooltipOptions = {
-                permanent: true,      // Luôn hiển thị tooltip
-                direction: 'top',     // Hiển thị phía trên marker
-                offset: [0, -15],     // Chỉnh vị trí để không che icon
-                className: 'custom-tooltip' // Áp dụng CSS tùy chỉnh
-            };
+        // --- PHẦN 3: HÀM CẬP NHẬT & XÓA MARKER ---
+        function updateMarker(id, name, lat, lng) {
+            const isCurrentUser = (id === currentUserId);
+            const markerOptions = isCurrentUser ? { icon: myIcon } : {};
 
             if (markers[id]) {
-                // Nếu marker đã tồn tại, chỉ cập nhật vị trí
                 markers[id].setLatLng([lat, lng]);
             } else {
-                // Nếu chưa, tạo marker mới và gắn tooltip
                 const newMarker = L.marker([lat, lng], markerOptions)
-                                    .bindTooltip(tooltipContent, tooltipOptions);
-                
-                markers[id] = newMarker; // Lưu lại để cập nhật sau
-                
-                markersLayer.addLayer(newMarker); // Thêm vào lớp gom nhóm
+                    .bindTooltip(`<b>${name}</b>`, {
+                        permanent: true, direction: 'top', offset: [0, -15], className: 'custom-tooltip'
+                    });
+                markers[id] = newMarker;
+                markersLayer.addLayer(newMarker);
             }
         }
-        
-        let isFirstLocationUpdate = true;
 
-        if ('geolocation' in navigator) {
+        function removeMarker(id) {
+            if (markers[id]) {
+                markersLayer.removeLayer(markers[id]);
+                delete markers[id];
+            }
+        }
+
+        // --- PHẦN 4: XÁC THỰC VÀ LẮNG NGHE DỮ LIỆU ---
+        signInAnonymously(auth)
+            .then((userCredential) => {
+                currentUserId = userCredential.user.uid;
+                const userName = prompt("Nhập tên của bạn:", "Tôi") || "Người dùng ẩn danh";
+                showNotification("Kết nối thành công! Đang lấy vị trí của bạn...");
+                
+                // Lắng nghe thay đổi vị trí của mọi người, CÓ xử lý lỗi
+                onSnapshot(locationsRef, 
+                    (snapshot) => {
+                        snapshot.docChanges().forEach(change => {
+                            const docData = change.doc.data();
+                            const docId = change.doc.id;
+
+                            if (change.type === "added" || change.type === "modified") {
+                                if (docId !== currentUserId) {
+                                    updateMarker(docId, docData.name, docData.lat, docData.lng);
+                                }
+                            } else if (change.type === "removed") {
+                                removeMarker(docId);
+                            }
+                        });
+                    },
+                    (error) => { // Xử lý lỗi từ onSnapshot
+                        console.error("Lỗi Firestore Snapshot:", error);
+                        if (error.code === 'permission-denied') {
+                            showNotification("Lỗi quyền truy cập! Vui lòng kiểm tra Cài đặt Security Rules trong Firebase Console.", true);
+                        } else {
+                            showNotification("Lỗi kết nối Firestore.", true);
+                        }
+                    }
+                );
+
+                startWatchingLocation(userName);
+
+                window.addEventListener('beforeunload', () => {
+                    deleteDoc(doc(db, 'locations', currentUserId));
+                });
+
+            })
+            .catch((error) => {
+                console.error("Lỗi xác thực:", error);
+                showNotification("Không thể kết nối tới server. Vui lòng tải lại trang.", true);
+            });
+
+        // --- PHẦN 5: THEO DÕI VỊ TRÍ VÀ GỬI LÊN FIREBASE ---
+        function startWatchingLocation(userName) {
+            if (!('geolocation' in navigator)) {
+                showNotification("Trình duyệt không hỗ trợ định vị.", true);
+                return;
+            }
+
+            let isFirstUpdate = true;
             navigator.geolocation.watchPosition(
-                (position) => {
+                async (position) => {
                     const { latitude, longitude } = position.coords;
                     currentUserLocation = [latitude, longitude];
+                    updateMarker(currentUserId, userName, latitude, longitude);
 
-                    updateMarker(userName, latitude, longitude, true);
-
-                    if (isFirstLocationUpdate) {
+                    if (isFirstUpdate) {
                         map.setView(currentUserLocation, 17);
-                        isFirstLocationUpdate = false;
+                        isFirstUpdate = false;
                     }
-                },
-                (error) => {
-                    console.error("Lỗi khi lấy vị trí:", error);
-                    showNotification("Không thể lấy vị trí. Vui lòng kiểm tra quyền truy cập vị trí.");
-                }, 
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                }
-            );
-        } else {
-            showNotification("Trình duyệt của bạn không hỗ trợ định vị.");
-        }
-        
-        // --- PHẦN 3: THÊM SỰ KIỆN CHO CÁC NÚT ĐIỀU KHIỂN ---
 
+                    const locationData = {
+                        name: userName,
+                        lat: latitude,
+                        lng: longitude,
+                        timestamp: serverTimestamp()
+                    };
+                    await setDoc(doc(db, 'locations', currentUserId), locationData, { merge: true });
+                },
+                (error) => { // Cải thiện thông báo lỗi vị trí
+                    console.error("Lỗi vị trí:", error);
+                    let message = "Không thể lấy vị trí của bạn. ";
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            message += "Bạn đã từ chối quyền truy cập.";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            message += "Thông tin vị trí không có sẵn.";
+                            break;
+                        case error.TIMEOUT:
+                            message += "Yêu cầu đã hết hạn.";
+                            break;
+                        default:
+                            message += "Đã có lỗi không xác định xảy ra.";
+                            break;
+                    }
+                    showNotification(message, true);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        // --- PHẦN 6: SỰ KIỆN CÁC NÚT BẤM ---
         zoomToMeBtn.addEventListener('click', () => {
-            if (currentUserLocation) {
-                map.setView(currentUserLocation, 17);
-            } else {
-                showNotification("Chưa có thông tin vị trí của bạn.");
-            }
+            if (currentUserLocation) map.setView(currentUserLocation, 17);
+            else showNotification("Chưa có vị trí của bạn.", true);
         });
 
         zoomToAllBtn.addEventListener('click', () => {
-            if (markersLayer.getLayers().length > 0) {
-                map.fitBounds(markersLayer.getBounds().pad(0.2));
-            } else {
-                showNotification("Chưa có vị trí của ai trên bản đồ.");
-            }
+            if (markersLayer.getLayers().length > 0) map.fitBounds(markersLayer.getBounds().pad(0.2));
+            else showNotification("Chưa có ai trên bản đồ.", true);
         });
-
-        // --- PHẦN 4: MÔ PHỎNG DỮ LIỆU BẠN BÈ ---
-        function simulateFriends() {
-            console.log("Mô phỏng vị trí bạn bè...");
-            updateMarker("Anh A", 21.0288, 105.8525, false);
-            updateMarker("Chị B", 21.0275, 105.8550, false);
-            
-            updateMarker("Bạn C", 21.0289, 105.8526, false);
-            updateMarker("Bạn D", 21.0287, 105.8524, false);
-        }
-
-        setTimeout(simulateFriends, 3000);
 
     </script>
 </body>
