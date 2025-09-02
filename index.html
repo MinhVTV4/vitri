@@ -333,7 +333,12 @@
                     switch(error.code) {
                         case error.PERMISSION_DENIED: message += "Bạn đã từ chối quyền truy cập."; break;
                         case error.POSITION_UNAVAILABLE: message += "Thông tin vị trí không có sẵn."; break;
-aximumAge: 0 }
+                        case error.TIMEOUT: message += "Yêu cầu đã hết hạn."; break;
+                        default: message += "Đã có lỗi không xác định xảy ra."; break;
+                    }
+                    showNotification(message, true);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         }
 
