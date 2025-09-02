@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bản đồ Nhóm Nhạc Hội</title>
+    <!-- Nhúng CSS của Leaflet từ CDN -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    <!-- CSS nội bộ cho ứng dụng -->
+    <style>
+        /* Reset CSS mặc định và đảm bảo bản đồ toàn màn hình */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden; /* Tránh thanh cuộn không cần thiết */
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            background-color: #eaf0f5;
+        }
+
+        /* Thanh thông báo lỗi */
+        #notification-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: #d9534f;
+            color: white;
+            text-align: center;
+            padding: 12px;
+            z-index: 1001; /* Đảm bảo nó hiển thị trên bản đồ */
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transform: translateY(-100%);
+            transition: transform 0.3s ease-in-out;
+        }
+        #notification-bar.show {
+            transform: translateY(0);
+        }
+
+        /* Tùy chỉnh popup của Leaflet cho đẹp hơn */
+        .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .leaflet-popup-content {
+            margin: 13px 19px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .leaflet-popup-tip {
+             background: white;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Thanh thông báo lỗi -->
+    <div id="notification-bar"></div>
+
+    <!-- Thẻ div này sẽ là nơi bản đồ được hiển thị -->
+    <div id="map"></div>
+
+    <!-- Nhúng JavaScript của Leaflet từ CDN -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- JavaScript nội bộ cho ứng dụng -->
+    <script>
+        // --- PHẦN 1: KHỞI TẠO VÀ CẤU HÌNH ---
+
+        const notificationBar = document.getElementById('notification-bar');
+
+        // Hàm hiển thị thông báo
+        function showNotification(message) {
+            notificationBar.textContent = message;
+            notificationBar.classList.add('show');
+            // Tự động ẩn sau 5 giây
+            setTimeout(() => {
+                notificationBar.classList.remove('show');
+            }, 5000);
+        }
+
+        // Hỏi tên người dùng để định danh trên bản đồ
+        const userName = prompt("Nhập tên của bạn để hiển thị trên bản đồ:", "Tôi") || "Người dùng ẩn danh";
+
+        // Khởi tạo bản đồ, đặt tọa độ xem mặc định (ví dụ: trung tâm Hà Nội) và mức zoom
+        const map = L.map('map').setView([21.0285, 105.8542], 16);
+
+        // Thêm lớp nền bản đồ từ OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Tạo một đối tượng để lưu trữ các marker của mọi người
+        const markers = {};
+
+        // --- PHẦN 2: XỬ LÝ VỊ TRÍ CỦA BẠN ---
+
+        // Tạo một icon tùy chỉnh cho người dùng chính
+        const myIcon = L.divIcon({
+            className: 'my-div-icon',
+            html: `<svg viewBox="0 0 24 24" width="32" height="32" fill="#007bff" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+            popupAnchor: [0, -18]
+        });
+
+        // Hàm để cập nhật hoặc tạo mới marker trên bản đồ
+        function updateMarker(id, lat, lng, isCurrentUser = false) {
+            const popupContent = `<b>${id}</b>`;
+            const markerOptions = {}; // Tạo đối tượng options
+
+            // Chỉ thêm icon tùy chỉnh nếu là người dùng hiện tại
+            if (isCurrentUser) {
+                markerOptions.icon = myIcon;
+            }
+
+            if (markers[id]) {
+                // Nếu marker đã tồn tại, chỉ cần cập nhật vị trí
+                markers[id].setLatLng([lat, lng]);
+            } else {
+                // Nếu chưa có, tạo marker mới với options đã chuẩn bị
+                markers[id] = L.marker([lat, lng], markerOptions).addTo(map)
+                    .bindPopup(popupContent)
+                    .openPopup();
+            }
+        }
+        
+        let isFirstLocationUpdate = true;
+
+        // Sử dụng Geolocation API để theo dõi vị trí
+        if ('geolocation' in navigator) {
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+
+                    // Cập nhật vị trí của chính bạn trên bản đồ
+                    updateMarker(userName, latitude, longitude, true);
+
+                    // Lần đầu lấy được vị trí, di chuyển bản đồ tới đó
+                    if (isFirstLocationUpdate) {
+                        map.setView([latitude, longitude], 17);
+                        isFirstLocationUpdate = false;
+                    }
+
+                    // --- PHẦN 3: GỬI VÀ NHẬN DỮ LIỆU (CẦN BACKEND) ---
+                    /*
+                    TRONG MỘT ỨNG DỤNG THỰC TẾ, ĐÂY LÀ LÚC BẠN SẼ:
+                    1. Tạo một đối tượng dữ liệu
+                       const locationData = { id: userName, lat: latitude, lng: longitude };
+                    
+                    2. Gửi dữ liệu này tới WebSocket server
+                       ws.send(JSON.stringify(locationData));
+                    */
+                },
+                (error) => {
+                    console.error("Lỗi khi lấy vị trí:", error);
+                    showNotification("Không thể lấy vị trí. Vui lòng kiểm tra quyền truy cập vị trí của trình duyệt.");
+                }, 
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        } else {
+            showNotification("Trình duyệt của bạn không hỗ trợ định vị.");
+        }
+
+        /*
+        TRONG MỘT ỨNG DỤNG THỰC TẾ, BẠN SẼ CÓ MỘT ĐOẠN MÃ NHƯ SAU:
+        
+        const ws = new WebSocket('wss://your-server-address');
+
+        ws.onmessage = (event) => {
+            const friendData = JSON.parse(event.data);
+            const { id, lat, lng } = friendData;
+            if (id !== userName) {
+                updateMarker(id, lat, lng, false);
+            }
+        };
+
+        ws.onopen = () => console.log('Đã kết nối tới server!');
+        ws.onclose = () => console.log('Đã ngắt kết nối với server.');
+        */
+
+        // --- PHẦN 4: MÔ PHỎNG DỮ LIỆU BẠN BÈ ---
+        function simulateFriends() {
+            console.log("Mô phỏng vị trí bạn bè...");
+            updateMarker("Anh A", 21.0288, 105.8525, false);
+            updateMarker("Chị B", 21.0275, 105.8550, false);
+        }
+
+        setTimeout(simulateFriends, 3000);
+
+    </script>
+</body>
+</html>
+
