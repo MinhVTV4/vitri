@@ -97,6 +97,18 @@
             transform: scale(0.95);
             background-color: #f0f0f0;
         }
+
+        /* Tùy chỉnh tooltip để tên luôn hiển thị */
+        .custom-tooltip {
+            background-color: transparent;
+            border: none;
+            box-shadow: none;
+            font-weight: bold;
+            font-size: 12px;
+            color: #1a1a1a;
+            /* Thêm viền chữ để dễ đọc trên mọi nền bản đồ */
+            text-shadow: -1px -1px 0 #FFF, 1px -1px 0 #FFF, -1px 1px 0 #FFF, 1px 1px 0 #FFF;
+        }
     </style>
 </head>
 <body>
@@ -144,9 +156,8 @@
         const markers = {};
         let currentUserLocation = null;
 
-        // Tạo một lớp layer để gom nhóm các marker
         const markersLayer = L.markerClusterGroup();
-        map.addLayer(markersLayer); // Thêm lớp gom nhóm vào bản đồ
+        map.addLayer(markersLayer);
 
         // --- PHẦN 2: XỬ LÝ VỊ TRÍ CỦA BẠN ---
 
@@ -154,28 +165,34 @@
             className: 'my-div-icon',
             html: `<svg viewBox="0 0 24 24" width="32" height="32" fill="#007bff" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`,
             iconSize: [32, 32],
-            iconAnchor: [16, 16],
-            popupAnchor: [0, -18]
+            iconAnchor: [16, 16]
         });
 
         function updateMarker(id, lat, lng, isCurrentUser = false) {
-            const popupContent = `<b>${id}</b>`;
+            const tooltipContent = `<b>${id}</b>`;
             const markerOptions = {};
             if (isCurrentUser) {
                 markerOptions.icon = myIcon;
             }
 
+            const tooltipOptions = {
+                permanent: true,      // Luôn hiển thị tooltip
+                direction: 'top',     // Hiển thị phía trên marker
+                offset: [0, -15],     // Chỉnh vị trí để không che icon
+                className: 'custom-tooltip' // Áp dụng CSS tùy chỉnh
+            };
+
             if (markers[id]) {
                 // Nếu marker đã tồn tại, chỉ cập nhật vị trí
                 markers[id].setLatLng([lat, lng]);
             } else {
-                // Nếu chưa, tạo marker mới
-                const newMarker = L.marker([lat, lng], markerOptions).bindPopup(popupContent);
+                // Nếu chưa, tạo marker mới và gắn tooltip
+                const newMarker = L.marker([lat, lng], markerOptions)
+                                    .bindTooltip(tooltipContent, tooltipOptions);
+                
                 markers[id] = newMarker; // Lưu lại để cập nhật sau
                 
-                // Thêm marker mới vào lớp gom nhóm thay vì bản đồ trực tiếp
-                markersLayer.addLayer(newMarker);
-                newMarker.openPopup();
+                markersLayer.addLayer(newMarker); // Thêm vào lớp gom nhóm
             }
         }
         
@@ -219,7 +236,6 @@
         });
 
         zoomToAllBtn.addEventListener('click', () => {
-            // Lớp gom nhóm có thể cung cấp vùng bao của tất cả các marker
             if (markersLayer.getLayers().length > 0) {
                 map.fitBounds(markersLayer.getBounds().pad(0.2));
             } else {
@@ -230,11 +246,9 @@
         // --- PHẦN 4: MÔ PHỎNG DỮ LIỆU BẠN BÈ ---
         function simulateFriends() {
             console.log("Mô phỏng vị trí bạn bè...");
-            // Các bạn bè ban đầu
             updateMarker("Anh A", 21.0288, 105.8525, false);
             updateMarker("Chị B", 21.0275, 105.8550, false);
             
-            // Thêm vài người bạn đứng gần Anh A để kiểm tra tính năng gom nhóm
             updateMarker("Bạn C", 21.0289, 105.8526, false);
             updateMarker("Bạn D", 21.0287, 105.8524, false);
         }
