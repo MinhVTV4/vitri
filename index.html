@@ -3,135 +3,229 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bản đồ Nhóm Nhạc Hội (Realtime DB)</title>
-    <!-- CSS của Leaflet & MarkerCluster -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <title>Bản đồ Thời gian thực</title>
+    
+    <!-- Thư viện CSS của Leaflet & MarkerCluster -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     
     <style>
-        /* Reset CSS và style cơ bản */
+        /* === BIẾN MÀU CSS === */
+        :root {
+            --primary-color: #007bff;
+            --success-color: #28a745;
+            --info-color: #17a2b8;
+            --danger-color: #dc3545;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --text-color: #212529;
+            --background-color: #eaf0f5;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* === THIẾT LẬP CƠ BẢN === */
         html, body {
-            height: 100%; margin: 0; padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-family);
             overflow: hidden;
         }
-        #map { width: 100%; height: 100%; background-color: #eaf0f5; }
 
-        /* Thanh thông báo */
-        #notification-bar {
-            position: fixed; top: 0; left: 0; width: 100%;
-            background-color: #5bc0de; color: white; text-align: center;
-            padding: 12px; z-index: 1001; font-size: 14px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            transform: translateY(-100%);
-            transition: transform 0.3s ease-in-out;
+        #map {
+            width: 100%;
+            height: 100%;
+            background-color: var(--background-color);
+            z-index: 1;
         }
-        #notification-bar.error { background-color: #d9534f; }
-        #notification-bar.show { transform: translateY(0); }
-        
-        /* Nút điều khiển */
+
+        /* === LỚP PHỦ LÚC TẢI === */
+        #loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            transition: opacity 0.3s ease;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .hidden { display: none !important; }
+
+        /* === MODAL NHẬP TÊN === */
+        #modal-container {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1999;
+        }
+        #name-modal {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            text-align: center;
+            width: 90%;
+            max-width: 350px;
+        }
+        #name-modal h2 { margin-top: 0; color: var(--dark-color); }
+        #name-modal p { color: #6c757d; font-size: 14px; margin-bottom: 20px;}
+        #name-input {
+            width: calc(100% - 20px);
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+        #submit-name {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #submit-name:hover { background-color: #0056b3; }
+
+        /* === THANH THÔNG BÁO === */
+        #notification-bar {
+            position: fixed;
+            top: 0;
+            left: 50%;
+            transform: translate(-50%, -120%);
+            width: fit-content;
+            max-width: 90%;
+            background-color: var(--info-color);
+            color: white;
+            text-align: center;
+            padding: 12px 20px;
+            z-index: 1001;
+            font-size: 14px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: transform 0.4s ease-in-out;
+        }
+        #notification-bar.error { background-color: var(--danger-color); }
+        #notification-bar.success { background-color: var(--success-color); }
+        #notification-bar.show { transform: translate(-50%, 20px); }
+
+        /* === CÁC NÚT ĐIỀU KHIỂN === */
         .map-controls {
-            position: fixed; top: 15px; right: 15px;
-            z-index: 1000; display: flex; flex-direction: column; gap: 10px;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
         .map-controls button {
-            width: 50px; height: 50px; border-radius: 50%;
-            background-color: white; border: 1px solid #ddd;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15); cursor: pointer;
-            font-size: 24px; line-height: 50px; text-align: center;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background-color: white;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             transition: background-color 0.2s, transform 0.1s;
         }
         .map-controls button:hover { background-color: #f7f7f7; }
         .map-controls button:active { transform: scale(0.95); }
+        .map-controls svg { width: 24px; height: 24px; color: var(--dark-color); }
 
-        /* Tooltip tên */
+        /* === POPUP & TOOLTIP === */
+        .custom-popup .leaflet-popup-content-wrapper { border-radius: 8px; }
+        .custom-popup .leaflet-popup-content { font-size: 14px; text-align: center;}
+        .popup-header { font-weight: bold; font-size: 16px; margin-bottom: 5px; }
+        .popup-time { font-size: 12px; color: #6c757d; }
+
         .custom-tooltip {
-            background-color: transparent; border: none; box-shadow: none;
-            font-weight: bold; font-size: 12px; color: #1a1a1a;
+            background-color: transparent;
+            border: none;
+            box-shadow: none;
+            font-weight: bold;
+            font-size: 12px;
+            color: var(--text-color);
             text-shadow: -1px -1px 0 #FFF, 1px -1px 0 #FFF, -1px 1px 0 #FFF, 1px 1px 0 #FFF;
             text-align: center;
         }
-
-        /* Style cho marker offline */
-        .marker-offline {
-            opacity: 0.6 !important;
-            filter: grayscale(80%);
-        }
-
-        /* --- STYLES MỚI CHO MARKER VÀ CLUSTER --- */
-
-        /* Style cho marker của bạn (hiệu ứng pulse) */
+        
+        /* === HIỆU ỨNG VÀ STYLE CHO MARKER === */
         @keyframes pulse {
             0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7); }
-            70% { transform: scale(1.1); box-shadow: 0 0 0 12px rgba(0, 123, 255, 0); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 15px rgba(0, 123, 255, 0); }
             100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 123, 255, 0); }
         }
-        .my-div-icon svg {
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-            overflow: visible; /* Để shadow không bị cắt */
-        }
-
-        /* Style cho marker của bạn bè */
-        .friend-div-icon svg {
-            border-radius: 50%;
-            box-shadow: 0 0 0 2px rgba(255,255,255,0.7);
-        }
-        
-        /* Style cho gom nhóm (Marker Cluster) */
-        .marker-cluster-small { background-color: rgba(24, 167, 105, 0.6); }
-        .marker-cluster-small div { background-color: rgba(24, 167, 105, 0.9); }
-
-        .marker-cluster-medium { background-color: rgba(240, 194, 12, 0.6); }
-        .marker-cluster-medium div { background-color: rgba(241, 196, 15, 0.9); }
-
-        .marker-cluster-large { background-color: rgba(241, 128, 23, 0.6); }
-        .marker-cluster-large div { background-color: rgba(241, 128, 23, 0.9); }
-
-        .marker-cluster {
-            width: 40px !important;
-            height: 40px !important;
-            border-radius: 50%;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            transition: background-color 0.3s;
-            border: 2px solid white;
-        }
-        .marker-cluster div {
-            width: 30px;
-            height: 30px;
-            margin-left: 3px;
-            margin-top: 3px;
-            text-align: center;
-            border-radius: 50%;
-            font-size: 14px;
-            font-weight: bold;
-            color: white;
-            line-height: 30px;
-        }
+        .my-div-icon svg { animation: pulse 2s infinite; overflow: visible; }
+        .marker-icon svg { border-radius: 50%; box-shadow: 0 0 0 2px rgba(255,255,255,0.8); }
+        .marker-offline { opacity: 0.5; filter: grayscale(100%); }
     </style>
 </head>
 <body>
-    <div id="notification-bar">Đang kết nối...</div>
+    <!-- Giao diện tải và nhập tên -->
+    <div id="loading-overlay"><div class="spinner"></div></div>
+    
+    <div id="modal-container" class="hidden">
+        <div id="name-modal">
+            <h2>Chào mừng bạn!</h2>
+            <p>Vui lòng nhập tên hiển thị của bạn trên bản đồ.</p>
+            <input type="text" id="name-input" placeholder="Tên của bạn..." maxlength="20">
+            <button id="submit-name">Tham gia</button>
+        </div>
+    </div>
+    
+    <!-- Giao diện chính -->
+    <div id="notification-bar"></div>
     <div id="map"></div>
     <div class="map-controls">
-        <button id="zoom-to-me" title="Zoom về vị trí của tôi">👤</button>
-        <button id="zoom-to-all" title="Xem tất cả mọi người">👨‍👩‍👧‍👦</button>
+        <button id="zoom-to-me" title="Về vị trí của tôi">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+        </button>
+        <button id="zoom-to-all" title="Xem tất cả">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>
+        </button>
     </div>
 
-    <!-- SDK của Leaflet & MarkerCluster -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <!-- Thư viện JS của Leaflet & MarkerCluster -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
-    <!-- Sử dụng script type="module" cho Firebase SDK v12+ -->
+    <!-- Firebase SDK (sử dụng type="module") -->
     <script type="module">
         // Import các hàm cần thiết từ Firebase SDK
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-        import { getDatabase, ref, onValue, set, onDisconnect, serverTimestamp, remove, update } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue, update, onDisconnect, serverTimestamp, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // --- PHẦN 1: CẤU HÌNH FIREBASE ---
-        const firebaseConfig = {
+        // --- PHẦN 1: CẤU HÌNH & KHAI BÁO BIẾN ---
+        
+        // !!! QUAN TRỌNG: Thay thế bằng cấu hình Firebase của bạn
+        // Lấy từ Project settings > General trong Firebase Console
+          const firebaseConfig = {
             apiKey: "AIzaSyDn-3B1ZNCq9E9XuNoHHHiyIo_Pegy8Ogk",
             authDomain: "ailocal-7501e.firebaseapp.com",
             databaseURL: "https://ailocal-7501e-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -140,56 +234,416 @@
             messagingSenderId: "21856417488",
             appId: "1:21856417488:web:c3542543f12cab547b90d5"
         };
+        
+        // Biến toàn cục để quản lý trạng thái ứng dụng
+        const appState = {
+            map: null,
+            db: null,
+            auth: null,
+            currentUserId: null,
+            currentUserLocation: null,
+            userName: null,
+            markers: {}, // Lưu trữ các đối tượng marker
+            markersLayer: L.markerClusterGroup(), // Layer để gom nhóm marker
+            isFirstLocationUpdate: true,
+            locationWatcherId: null,
+        };
+        
+        // DOM Elements
+        const DOMElements = {
+            loadingOverlay: document.getElementById('loading-overlay'),
+            modalContainer: document.getElementById('modal-container'),
+            nameInput: document.getElementById('name-input'),
+            submitNameBtn: document.getElementById('submit-name'),
+            notificationBar: document.getElementById('notification-bar'),
+            zoomToMeBtn: document.getElementById('zoom-to-me'),
+            zoomToAllBtn: document.getElementById('zoom-to-all'),
+        };
 
-        // --- PHẦN 2: KHỞI TẠO ỨNG DỤNG ---
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const auth = getAuth(app);
-        const locationsRef = ref(db, 'locations');
+        // --- PHẦN 2: HÀM KHỞI TẠO VÀ CÀI ĐẶT ---
 
-        const notificationBar = document.getElementById('notification-bar');
-        const zoomToMeBtn = document.getElementById('zoom-to-me');
-        const zoomToAllBtn = document.getElementById('zoom-to-all');
-
-        function showNotification(message, isError = false) {
-            notificationBar.textContent = message;
-            notificationBar.classList.toggle('error', isError);
-            notificationBar.classList.add('show');
-            setTimeout(() => { notificationBar.classList.remove('show'); }, 5000);
+        /**
+         * Hàm chính, khởi chạy toàn bộ ứng dụng
+         */
+        function main() {
+            initializeAppAndFirebase();
+            setupEventListeners();
+            handleAuthentication();
         }
 
-        const map = L.map('map').setView([21.0285, 105.8542], 16);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+        /**
+         * Khởi tạo Firebase App và các dịch vụ liên quan
+         */
+        function initializeAppAndFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                appState.db = getDatabase(app);
+                appState.auth = getAuth(app);
+            } catch (error) {
+                console.error("Lỗi khởi tạo Firebase:", error);
+                showNotification("Lỗi cấu hình Firebase. Vui lòng kiểm tra console.", true);
+                DOMElements.loadingOverlay.classList.add('hidden');
+            }
+        }
 
-        const markers = {};
-        let currentUserId = null;
-        let currentUserLocation = null;
-        const markersLayer = L.markerClusterGroup();
-        map.addLayer(markersLayer);
+        /**
+         * Khởi tạo bản đồ Leaflet
+         */
+        function initializeMap() {
+            appState.map = L.map('map').setView([21.0285, 105.8542], 13); // Hà Nội
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19,
+            }).addTo(appState.map);
+            appState.map.addLayer(appState.markersLayer);
+        }
 
-        // --- CÁC BIỂU TƯỢNG MỚI ---
-        const myIcon = L.divIcon({
-            className: 'my-div-icon',
-            html: `<svg viewBox="0 0 24 24" width="32" height="32" fill="#007bff" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
-        });
+        /**
+         * Thiết lập các sự kiện cho các nút bấm và input
+         */
+        function setupEventListeners() {
+            DOMElements.submitNameBtn.addEventListener('click', handleNameSubmission);
+            DOMElements.nameInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') handleNameSubmission();
+            });
+            DOMElements.zoomToMeBtn.addEventListener('click', zoomToCurrentUser);
+            DOMElements.zoomToAllBtn.addEventListener('click', zoomToAllMarkers);
+        }
 
-        const friendIcon = L.divIcon({
-            className: 'friend-div-icon',
-            html: `<svg viewBox="0 0 24 24" width="28" height="28" fill="#18a769" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`,
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
-        });
+        // --- PHẦN 3: XÁC THỰC VÀ QUẢN LÝ NGƯỜI DÙNG ---
 
-        // --- PHẦN 3: HÀM TIỆN ÍCH & CẬP NHẬT MARKER ---
+        /**
+         * Lắng nghe trạng thái xác thực và xử lý đăng nhập
+         */
+        function handleAuthentication() {
+            onAuthStateChanged(appState.auth, user => {
+                if (user) {
+                    appState.currentUserId = user.uid;
+                    initializeUserSession();
+                } else {
+                    signInAnonymously(appState.auth).catch(error => {
+                        console.error("Lỗi đăng nhập ẩn danh:", error);
+                        showNotification("Không thể kết nối máy chủ. Vui lòng thử lại.", true);
+                    });
+                }
+            });
+        }
+        
+        /**
+         * Bắt đầu phiên làm việc của người dùng sau khi đăng nhập thành công
+         */
+        function initializeUserSession() {
+            const savedName = localStorage.getItem('userName');
+            if (savedName) {
+                appState.userName = savedName;
+                startApp();
+            } else {
+                DOMElements.modalContainer.classList.remove('hidden');
+                DOMElements.loadingOverlay.classList.add('hidden');
+                DOMElements.nameInput.focus();
+            }
+        }
+
+        /**
+         * Xử lý khi người dùng nhập tên
+         */
+        function handleNameSubmission() {
+            const name = DOMElements.nameInput.value.trim();
+            if (name) {
+                appState.userName = name;
+                localStorage.setItem('userName', name);
+                DOMElements.modalContainer.classList.add('hidden');
+                startApp();
+            } else {
+                showNotification("Vui lòng nhập tên của bạn.", true);
+            }
+        }
+        
+        /**
+         * Bắt đầu các chức năng chính của ứng dụng sau khi có tên người dùng
+         */
+        function startApp() {
+            DOMElements.loadingOverlay.classList.remove('hidden');
+            initializeMap();
+            startLocationWatcher();
+            listenForLocationUpdates();
+            setupPresence();
+            DOMElements.loadingOverlay.classList.add('hidden');
+            showNotification(`Chào mừng, ${appState.userName}!`, false, 'success');
+        }
+
+        /**
+         * Thiết lập trạng thái online/offline khi kết nối/mất kết nối
+         */
+        function setupPresence() {
+            const userLocationRef = ref(appState.db, `locations/${appState.currentUserId}`);
+            onDisconnect(userLocationRef).update({ 
+                status: 'offline',
+                timestamp: serverTimestamp() 
+            });
+        }
+
+        // --- PHẦN 4: THEO DÕI VỊ TRÍ ---
+
+        /**
+         * Bắt đầu theo dõi vị trí của người dùng
+         */
+        function startLocationWatcher() {
+            if (!('geolocation' in navigator)) {
+                showNotification("Trình duyệt không hỗ trợ định vị.", true);
+                return;
+            }
+            
+            appState.locationWatcherId = navigator.geolocation.watchPosition(
+                handleLocationSuccess,
+                handleLocationError,
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        /**
+         * Xử lý khi lấy vị trí thành công
+         * @param {GeolocationPosition} position - Đối tượng vị trí từ trình duyệt
+         */
+        function handleLocationSuccess(position) {
+            const { latitude, longitude } = position.coords;
+            appState.currentUserLocation = [latitude, longitude];
+
+            const locationData = {
+                name: appState.userName,
+                lat: latitude,
+                lng: longitude,
+                timestamp: serverTimestamp(),
+                status: 'online'
+            };
+            
+            const userLocationRef = ref(appState.db, `locations/${appState.currentUserId}`);
+            update(userLocationRef, locationData);
+
+            if (appState.isFirstLocationUpdate) {
+                appState.map.setView(appState.currentUserLocation, 17);
+                appState.isFirstLocationUpdate = false;
+            }
+        }
+
+        /**
+         * Xử lý khi có lỗi xảy ra trong quá trình lấy vị trí
+         * @param {GeolocationPositionError} error - Đối tượng lỗi
+         */
+        function handleLocationError(error) {
+            let message = "Không thể lấy vị trí. ";
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    message += "Bạn đã từ chối quyền truy cập vị trí. Vui lòng cấp quyền trong cài đặt trình duyệt.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message += "Thông tin vị trí không có sẵn.";
+                    break;
+                case error.TIMEOUT:
+                    message += "Yêu cầu đã hết hạn.";
+                    break;
+                default:
+                    message += "Đã xảy ra lỗi không xác định.";
+                    break;
+            }
+            showNotification(message, true);
+        }
+
+        // --- PHẦN 5: XỬ LÝ DỮ LIỆU VÀ BẢN ĐỒ ---
+
+        /**
+         * Lắng nghe thay đổi dữ liệu vị trí từ Firebase
+         */
+        function listenForLocationUpdates() {
+            const locationsRef = ref(appState.db, 'locations');
+            onValue(locationsRef, (snapshot) => {
+                const locations = snapshot.val() || {};
+                updateMapWithNewData(locations);
+            }, (error) => {
+                console.error("Lỗi Realtime Database:", error);
+                showNotification("Lỗi truy cập dữ liệu. Kiểm tra Security Rules.", true);
+            });
+        }
+        
+        /**
+         * Cập nhật bản đồ với dữ liệu mới từ Firebase
+         * @param {object} locations - Dữ liệu vị trí của tất cả người dùng
+         */
+        function updateMapWithNewData(locations) {
+            const allUserIdsInDb = Object.keys(locations);
+            const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+            
+            // Xóa các marker không còn trong DB
+            Object.keys(appState.markers).forEach(userId => {
+                if (!allUserIdsInDb.includes(userId)) {
+                    removeMarker(userId);
+                }
+            });
+
+            // Thêm hoặc cập nhật marker
+            allUserIdsInDb.forEach(userId => {
+                const userData = locations[userId];
+                // Dọn dẹp người dùng offline quá 1 ngày
+                if (userData.status === 'offline' && userData.timestamp < oneDayAgo) {
+                    remove(ref(appState.db, `locations/${userId}`));
+                    return;
+                }
+                createOrUpdateMarker(userId, userData);
+            });
+            
+            updateDocumentTitle();
+        }
+
+        /**
+         * Tạo hoặc cập nhật một marker trên bản đồ
+         * @param {string} id - ID của người dùng
+         * @param {object} data - Dữ liệu vị trí của người dùng
+         */
+        function createOrUpdateMarker(id, data) {
+            if (!data || typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
+            
+            const { name, lat, lng, status, timestamp } = data;
+            const isCurrentUser = (id === appState.currentUserId);
+            const isOffline = status === 'offline';
+            const position = [lat, lng];
+            let marker = appState.markers[id];
+
+            if (!marker) {
+                const icon = createMarkerIcon(isCurrentUser);
+                marker = L.marker(position, { icon });
+                appState.markers[id] = marker;
+                
+                marker.bindTooltip(name, {
+                    permanent: true, direction: 'top', offset: [0, -15], className: 'custom-tooltip'
+                });
+                
+                marker.bindPopup(createPopupContent(data), { className: 'custom-popup' });
+
+                appState.markersLayer.addLayer(marker);
+            } else {
+                marker.setLatLng(position);
+                marker.setPopupContent(createPopupContent(data));
+            }
+            
+            // Cập nhật trạng thái online/offline
+            const iconElement = marker._icon;
+            if (iconElement) {
+                iconElement.classList.toggle('marker-offline', isOffline);
+            }
+        }
+        
+        /**
+         * Tạo nội dung cho Popup
+         * @param {object} data - Dữ liệu của người dùng
+         * @returns {string} - Chuỗi HTML cho nội dung popup
+         */
+        function createPopupContent(data) {
+            const timeAgo = data.timestamp ? formatTimeAgo(data.timestamp) : 'N/A';
+            const statusText = data.status === 'online' ? 'Đang hoạt động' : `Lần cuối hoạt động: ${timeAgo}`;
+            return `
+                <div class="popup-header">${data.name}</div>
+                <div class="popup-time">${statusText}</div>
+            `;
+        }
+
+        /**
+         * Xóa một marker khỏi bản đồ
+         * @param {string} id - ID của người dùng
+         */
+        function removeMarker(id) {
+            if (appState.markers[id]) {
+                appState.markersLayer.removeLayer(appState.markers[id]);
+                delete appState.markers[id];
+            }
+        }
+
+        /**
+         * Tạo icon cho marker
+         * @param {boolean} isCurrentUser - true nếu là người dùng hiện tại
+         * @returns {L.DivIcon} - Đối tượng icon của Leaflet
+         */
+        function createMarkerIcon(isCurrentUser) {
+            const size = isCurrentUser ? [36, 36] : [30, 30];
+            const anchor = isCurrentUser ? [18, 18] : [15, 15];
+            const color = isCurrentUser ? 'var(--primary-color)' : 'var(--success-color)';
+            const className = isCurrentUser ? 'my-div-icon marker-icon' : 'friend-div-icon marker-icon';
+
+            const html = `
+                <svg viewBox="0 0 24 24" width="${size[0]}" height="${size[1]}" fill="${color}" stroke="#fff" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    ${isCurrentUser ? '<circle cx="12" cy="12" r="3"/>' : ''}
+                </svg>`;
+
+            return L.divIcon({ html, className, iconSize: size, iconAnchor: anchor });
+        }
+        
+        // --- PHẦN 6: HÀM TIỆN ÍCH VÀ ĐIỀU KHIỂN BẢN ĐỒ ---
+
+        /**
+         * Zoom bản đồ về vị trí người dùng hiện tại
+         */
+        function zoomToCurrentUser() {
+            if (appState.currentUserLocation) {
+                appState.map.setView(appState.currentUserLocation, 17, { animate: true });
+            } else {
+                showNotification("Chưa có vị trí của bạn.", true);
+            }
+        }
+        
+        /**
+         * Zoom bản đồ để thấy tất cả marker
+         */
+        function zoomToAllMarkers() {
+            const allMarkers = Object.values(appState.markers);
+            if (allMarkers.length > 0) {
+                const featureGroup = L.featureGroup(allMarkers);
+                appState.map.fitBounds(featureGroup.getBounds().pad(0.3), { animate: true });
+            } else {
+                showNotification("Chưa có ai trên bản đồ.", true);
+            }
+        }
+        
+        /**
+         * Cập nhật tiêu đề trang web với số người online
+         */
+        function updateDocumentTitle() {
+            const onlineCount = Object.values(appState.markers).filter(m => 
+                m._icon && !m._icon.classList.contains('marker-offline')
+            ).length;
+            document.title = `(${onlineCount}) Bản đồ Thời gian thực`;
+        }
+
+        /**
+         * Hiển thị thanh thông báo
+         * @param {string} message - Nội dung thông báo
+         * @param {boolean} isError - true nếu là thông báo lỗi
+         * @param {string} type - 'error', 'success', hoặc 'info' (mặc định)
+         */
+        let notificationTimeout;
+        function showNotification(message, isError = false, type = 'info') {
+            clearTimeout(notificationTimeout);
+            const bar = DOMElements.notificationBar;
+            bar.textContent = message;
+            bar.className = 'show'; // Reset classes
+            if (isError) {
+                bar.classList.add('error');
+            } else if (type === 'success') {
+                bar.classList.add('success');
+            }
+            
+            notificationTimeout = setTimeout(() => {
+                bar.classList.remove('show');
+            }, 4000);
+        }
+
+        /**
+         * Định dạng thời gian dạng "x phút trước"
+         * @param {number} timestamp - Mốc thời gian (milliseconds)
+         * @returns {string} - Chuỗi thời gian đã định dạng
+         */
         function formatTimeAgo(timestamp) {
             if (!timestamp) return '';
-            const now = Date.now();
-            const seconds = Math.floor((now - timestamp) / 1000);
-
+            const seconds = Math.floor((Date.now() - timestamp) / 1000);
             if (seconds < 60) return `vài giây trước`;
             const minutes = Math.floor(seconds / 60);
             if (minutes < 60) return `${minutes} phút trước`;
@@ -199,177 +653,8 @@
             return `${days} ngày trước`;
         }
 
-        function updateMarker(id, userData) {
-            if (!userData || typeof userData.lat !== 'number' || typeof userData.lng !== 'number') {
-                if (userData && userData.status === 'offline') {
-                    removeMarker(id);
-                }
-                console.warn(`Dữ liệu vị trí không đầy đủ cho user ${id}. Bỏ qua cập nhật marker.`);
-                return;
-            }
-
-            const { name, lat, lng, status, timestamp } = userData;
-            const isCurrentUser = (id === currentUserId);
-            const isOffline = status === 'offline';
-            
-            let marker = markers[id];
-
-            if (!marker) {
-                const iconToUse = isCurrentUser ? myIcon : friendIcon;
-                const markerOptions = { icon: iconToUse };
-                marker = L.marker([lat, lng], markerOptions);
-                markers[id] = marker;
-                markersLayer.addLayer(marker);
-            } else {
-                marker.setLatLng([lat, lng]);
-            }
-            
-            let tooltipContent = `<b>${name}</b>`;
-            if (isOffline) {
-                tooltipContent += `<br><small>Lần cuối: ${formatTimeAgo(timestamp)}</small>`;
-            }
-            if (marker.getTooltip()) {
-                marker.setTooltipContent(tooltipContent);
-            } else {
-                 marker.bindTooltip(tooltipContent, {
-                    permanent: true, direction: 'top', offset: [0, -15], className: 'custom-tooltip'
-                });
-            }
-
-            const iconElement = marker._icon;
-            if (iconElement) {
-                if (isOffline) {
-                    iconElement.classList.add('marker-offline');
-                } else {
-                    iconElement.classList.remove('marker-offline');
-                }
-            }
-        }
-
-        function removeMarker(id) {
-            if (markers[id]) {
-                markersLayer.removeLayer(markers[id]);
-                delete markers[id];
-            }
-        }
-
-        // --- PHẦN 4: XÁC THỰC VÀ LẮNG NGHE DỮ LIỆU ---
-        signInAnonymously(auth)
-            .then((userCredential) => {
-                currentUserId = userCredential.user.uid;
-                const userName = prompt("Nhập tên của bạn:", "Tôi") || "Người dùng ẩn danh";
-                showNotification("Kết nối thành công! Đang lấy vị trí của bạn...");
-                
-                onValue(locationsRef, 
-                    (snapshot) => {
-                        const locations = snapshot.val() || {};
-                        const currentlyTracked = Object.keys(markers);
-                        const allUserIdsInDb = Object.keys(locations);
-                        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-
-                        currentlyTracked.forEach(userId => {
-                            if (!allUserIdsInDb.includes(userId)) {
-                                removeMarker(userId);
-                            }
-                        });
-                        
-                        allUserIdsInDb.forEach(userId => {
-                            const userData = locations[userId];
-                            if (userData.status === 'offline' && userData.timestamp < oneDayAgo) {
-                                remove(ref(db, 'locations/' + userId));
-                                return;
-                            }
-                            updateMarker(userId, userData);
-                        });
-                    },
-                    (error) => {
-                        console.error("Lỗi Realtime Database:", error);
-                        showNotification("Lỗi quyền truy cập CSDL. Vui lòng kiểm tra Security Rules trong Firebase.", true);
-                    }
-                );
-
-                startWatchingLocation(userName);
-
-                const userLocationRef = ref(db, 'locations/' + currentUserId);
-                onDisconnect(userLocationRef).update({ 
-                    status: 'offline',
-                    timestamp: serverTimestamp() 
-                });
-
-            })
-            .catch((error) => {
-                console.error("Lỗi xác thực:", error);
-                showNotification("Không thể kết nối tới server. Vui lòng tải lại trang.", true);
-            });
-
-        // --- PHẦN 5: THEO DÕI VỊ TRÍ VÀ GỬI LÊN FIREBASE ---
-        function startWatchingLocation(userName) {
-            if (!('geolocation' in navigator)) {
-                showNotification("Trình duyệt không hỗ trợ định vị.", true);
-                return;
-            }
-
-            let isFirstUpdate = true;
-            navigator.geolocation.watchPosition(
-                async (position) => {
-                    const { latitude, longitude } = position.coords;
-                    currentUserLocation = [latitude, longitude];
-                    
-                    const locationData = {
-                        name: userName,
-                        lat: latitude,
-                        lng: longitude,
-                        timestamp: serverTimestamp(),
-                        status: 'online'
-                    };
-                    
-                    if (isFirstUpdate) {
-                        map.setView(currentUserLocation, 17);
-                        isFirstUpdate = false;
-                    }
-                    
-                    const userLocationRef = ref(db, 'locations/' + currentUserId);
-                    // SỬA LỖI: Chuyển từ set() thành update()
-                    await update(userLocationRef, locationData);
-                },
-                (error) => {
-                    console.error("Lỗi vị trí:", error);
-                    let message = "Không thể lấy vị trí của bạn. ";
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED: message += "Bạn đã từ chối quyền truy cập."; break;
-                        case error.POSITION_UNAVAILABLE: message += "Thông tin vị trí không có sẵn."; break;
-                        case error.TIMEOUT: message += "Yêu cầu đã hết hạn."; break;
-                        default: message += "Đã có lỗi không xác định xảy ra."; break;
-                    }
-                    showNotification(message, true);
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        }
-
-        // --- PHẦN 6: SỰ KIỆN CÁC NÚT BẤM ---
-        zoomToMeBtn.addEventListener('click', () => {
-            if (currentUserLocation) map.setView(currentUserLocation, 17);
-            else showNotification("Chưa có vị trí của bạn.", true);
-        });
-
-        zoomToAllBtn.addEventListener('click', () => {
-            const onlineMarkers = Object.values(markers).filter(m => {
-                return m._icon && !m._icon.classList.contains('marker-offline');
-            });
-
-            if (onlineMarkers.length > 0) {
-                const onlineGroup = L.featureGroup(onlineMarkers);
-                map.fitBounds(onlineGroup.getBounds().pad(0.2));
-            } else if (markersLayer.getLayers().length > 0) {
-                map.fitBounds(markersLayer.getBounds().pad(0.2));
-            }
-            else {
-                 showNotification("Chưa có ai trên bản đồ.", true);
-            }
-        });
-
+        // --- BẮT ĐẦU ỨNG DỤNG ---
+        main();
     </script>
 </body>
 </html>
-
