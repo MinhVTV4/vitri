@@ -50,6 +50,13 @@
             background-color: transparent; border: none; box-shadow: none;
             font-weight: bold; font-size: 12px; color: #1a1a1a;
             text-shadow: -1px -1px 0 #FFF, 1px -1px 0 #FFF, -1px 1px 0 #FFF, 1px 1px 0 #FFF;
+            text-align: center; /* Căn giữa cho tooltip nhiều dòng */
+        }
+
+        /* Style cho marker offline */
+        .marker-offline {
+            opacity: 0.6 !important;
+            filter: grayscale(80%);
         }
     </style>
 </head>
@@ -69,7 +76,7 @@
     <script type="module">
         // Import các hàm cần thiết từ Firebase SDK
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-        import { getDatabase, ref, onValue, set, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
+        import { getDatabase, ref, onValue, set, onDisconnect, serverTimestamp, remove } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 
         // --- PHẦN 1: CẤU HÌNH FIREBASE ---
@@ -118,20 +125,58 @@
             iconAnchor: [16, 16]
         });
 
-        // --- PHẦN 3: HÀM CẬP NHẬT & XÓA MARKER ---
-        function updateMarker(id, name, lat, lng) {
-            const isCurrentUser = (id === currentUserId);
-            const markerOptions = isCurrentUser ? { icon: myIcon } : {};
+        // --- PHẦN 3: HÀM TIỆN ÍCH & CẬP NHẬT MARKER ---
+        function formatTimeAgo(timestamp) {
+            if (!timestamp) return '';
+            const now = Date.now();
+            const seconds = Math.floor((now - timestamp) / 1000);
 
-            if (markers[id]) {
-                markers[id].setLatLng([lat, lng]);
+            if (seconds < 60) return `vài giây trước`;
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes} phút trước`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours} giờ trước`;
+            const days = Math.floor(hours / 24);
+            return `${days} ngày trước`;
+        }
+
+        function updateMarker(id, userData) {
+            const { name, lat, lng, status, timestamp } = userData;
+            const isCurrentUser = (id === currentUserId);
+            const isOffline = status === 'offline';
+            
+            let marker = markers[id];
+
+            if (!marker) {
+                const markerOptions = isCurrentUser ? { icon: myIcon } : {};
+                marker = L.marker([lat, lng], markerOptions);
+                markers[id] = marker;
+                markersLayer.addLayer(marker);
             } else {
-                const newMarker = L.marker([lat, lng], markerOptions)
-                    .bindTooltip(`<b>${name}</b>`, {
-                        permanent: true, direction: 'top', offset: [0, -15], className: 'custom-tooltip'
-                    });
-                markers[id] = newMarker;
-                markersLayer.addLayer(newMarker);
+                marker.setLatLng([lat, lng]);
+            }
+            
+            // Cập nhật tooltip
+            let tooltipContent = `<b>${name}</b>`;
+            if (isOffline) {
+                tooltipContent += `<br><small>Lần cuối: ${formatTimeAgo(timestamp)}</small>`;
+            }
+            if (marker.getTooltip()) {
+                marker.setTooltipContent(tooltipContent);
+            } else {
+                 marker.bindTooltip(tooltipContent, {
+                    permanent: true, direction: 'top', offset: [0, -15], className: 'custom-tooltip'
+                });
+            }
+
+            // Cập nhật giao diện offline
+            const iconElement = marker._icon;
+            if (iconElement) {
+                if (isOffline) {
+                    iconElement.classList.add('marker-offline');
+                } else {
+                    iconElement.classList.remove('marker-offline');
+                }
             }
         }
 
@@ -153,32 +198,44 @@
                     (snapshot) => {
                         const locations = snapshot.val() || {};
                         const currentlyTracked = Object.keys(markers);
-                        const allOnlineUsers = Object.keys(locations);
+                        const allUserIdsInDb = Object.keys(locations);
+                        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
 
+                        // Xóa marker của người dùng đã bị xóa khỏi DB
                         currentlyTracked.forEach(userId => {
-                            if (!allOnlineUsers.includes(userId)) {
+                            if (!allUserIdsInDb.includes(userId)) {
                                 removeMarker(userId);
                             }
                         });
                         
-                        allOnlineUsers.forEach(userId => {
+                        // Cập nhật hoặc thêm marker
+                        allUserIdsInDb.forEach(userId => {
+                            const userData = locations[userId];
+                            // Tự động dọn dẹp người dùng offline quá 24 giờ
+                            if (userData.status === 'offline' && userData.timestamp < oneDayAgo) {
+                                remove(ref(db, 'locations/' + userId));
+                                return;
+                            }
+                            // Không cập nhật marker của chính mình từ DB
                             if (userId !== currentUserId) {
-                                const userData = locations[userId];
-                                updateMarker(userId, userData.name, userData.lat, userData.lng);
+                                updateMarker(userId, userData);
                             }
                         });
                     },
                     (error) => {
                         console.error("Lỗi Realtime Database:", error);
-                        // Cải thiện thông báo lỗi để hướng dẫn người dùng
                         showNotification("Lỗi quyền truy cập CSDL. Vui lòng kiểm tra Security Rules trong Firebase.", true);
                     }
                 );
 
                 startWatchingLocation(userName);
 
+                // Khi ngắt kết nối, cập nhật trạng thái thành offline và ghi lại timestamp
                 const userLocationRef = ref(db, 'locations/' + currentUserId);
-                onDisconnect(userLocationRef).remove();
+                onDisconnect(userLocationRef).update({ 
+                    status: 'offline',
+                    timestamp: serverTimestamp() 
+                });
 
             })
             .catch((error) => {
@@ -198,7 +255,17 @@
                 async (position) => {
                     const { latitude, longitude } = position.coords;
                     currentUserLocation = [latitude, longitude];
-                    updateMarker(currentUserId, userName, latitude, longitude);
+                    
+                    const locationData = {
+                        name: userName,
+                        lat: latitude,
+                        lng: longitude,
+                        timestamp: serverTimestamp(),
+                        status: 'online' // Luôn cập nhật trạng thái là online
+                    };
+                    
+                    // Cập nhật marker của chính mình ngay lập tức
+                    updateMarker(currentUserId, locationData);
 
                     if (isFirstUpdate) {
                         map.setView(currentUserLocation, 17);
@@ -206,12 +273,6 @@
                     }
                     
                     const userLocationRef = ref(db, 'locations/' + currentUserId);
-                    const locationData = {
-                        name: userName,
-                        lat: latitude,
-                        lng: longitude,
-                        timestamp: serverTimestamp()
-                    };
                     await set(userLocationRef, locationData);
                 },
                 (error) => {
@@ -236,8 +297,22 @@
         });
 
         zoomToAllBtn.addEventListener('click', () => {
-            if (markersLayer.getLayers().length > 0) map.fitBounds(markersLayer.getBounds().pad(0.2));
-            else showNotification("Chưa có ai trên bản đồ.", true);
+            const onlineMarkers = Object.values(markers).filter(m => {
+                // Chỉ zoom vào các marker không phải offline
+                return !m._icon.classList.contains('marker-offline');
+            });
+
+            if (onlineMarkers.length > 0) {
+                 // Tạo một layer group tạm thời để tính toán bounds
+                const onlineGroup = L.featureGroup(onlineMarkers);
+                map.fitBounds(onlineGroup.getBounds().pad(0.2));
+            } else if (markersLayer.getLayers().length > 0) {
+                // Nếu không có ai online, zoom vào tất cả
+                map.fitBounds(markersLayer.getBounds().pad(0.2));
+            }
+            else {
+                 showNotification("Chưa có ai trên bản đồ.", true);
+            }
         });
 
     </script>
