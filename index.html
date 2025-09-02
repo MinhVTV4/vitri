@@ -59,6 +59,41 @@
         .leaflet-popup-tip {
              background: white;
         }
+
+        /* Container cho các nút điều khiển */
+        .map-controls {
+            position: fixed;
+            bottom: 25px;
+            right: 15px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Kiểu dáng cho các nút điều khiển */
+        .map-controls button {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: white;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            cursor: pointer;
+            font-size: 24px;
+            line-height: 50px;
+            text-align: center;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .map-controls button:hover {
+            background-color: #f7f7f7;
+        }
+
+        .map-controls button:active {
+            transform: scale(0.95);
+            background-color: #f0f0f0;
+        }
     </style>
 </head>
 <body>
@@ -69,6 +104,12 @@
     <!-- Thẻ div này sẽ là nơi bản đồ được hiển thị -->
     <div id="map"></div>
 
+    <!-- Các nút điều khiển bản đồ -->
+    <div class="map-controls">
+        <button id="zoom-to-me" title="Zoom về vị trí của tôi">👤</button>
+        <button id="zoom-to-all" title="Xem tất cả mọi người">👨‍👩‍👧‍👦</button>
+    </div>
+
     <!-- Nhúng JavaScript của Leaflet từ CDN -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
@@ -77,34 +118,30 @@
         // --- PHẦN 1: KHỞI TẠO VÀ CẤU HÌNH ---
 
         const notificationBar = document.getElementById('notification-bar');
+        const zoomToMeBtn = document.getElementById('zoom-to-me');
+        const zoomToAllBtn = document.getElementById('zoom-to-all');
 
         // Hàm hiển thị thông báo
         function showNotification(message) {
             notificationBar.textContent = message;
             notificationBar.classList.add('show');
-            // Tự động ẩn sau 5 giây
             setTimeout(() => {
                 notificationBar.classList.remove('show');
             }, 5000);
         }
 
-        // Hỏi tên người dùng để định danh trên bản đồ
         const userName = prompt("Nhập tên của bạn để hiển thị trên bản đồ:", "Tôi") || "Người dùng ẩn danh";
-
-        // Khởi tạo bản đồ, đặt tọa độ xem mặc định (ví dụ: trung tâm Hà Nội) và mức zoom
         const map = L.map('map').setView([21.0285, 105.8542], 16);
 
-        // Thêm lớp nền bản đồ từ OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // Tạo một đối tượng để lưu trữ các marker của mọi người
         const markers = {};
+        let currentUserLocation = null; // Biến lưu vị trí hiện tại của người dùng
 
         // --- PHẦN 2: XỬ LÝ VỊ TRÍ CỦA BẠN ---
 
-        // Tạo một icon tùy chỉnh cho người dùng chính
         const myIcon = L.divIcon({
             className: 'my-div-icon',
             html: `<svg viewBox="0 0 24 24" width="32" height="32" fill="#007bff" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`,
@@ -113,21 +150,16 @@
             popupAnchor: [0, -18]
         });
 
-        // Hàm để cập nhật hoặc tạo mới marker trên bản đồ
         function updateMarker(id, lat, lng, isCurrentUser = false) {
             const popupContent = `<b>${id}</b>`;
-            const markerOptions = {}; // Tạo đối tượng options
-
-            // Chỉ thêm icon tùy chỉnh nếu là người dùng hiện tại
+            const markerOptions = {};
             if (isCurrentUser) {
                 markerOptions.icon = myIcon;
             }
 
             if (markers[id]) {
-                // Nếu marker đã tồn tại, chỉ cần cập nhật vị trí
                 markers[id].setLatLng([lat, lng]);
             } else {
-                // Nếu chưa có, tạo marker mới với options đã chuẩn bị
                 markers[id] = L.marker([lat, lng], markerOptions).addTo(map)
                     .bindPopup(popupContent)
                     .openPopup();
@@ -136,34 +168,25 @@
         
         let isFirstLocationUpdate = true;
 
-        // Sử dụng Geolocation API để theo dõi vị trí
         if ('geolocation' in navigator) {
             navigator.geolocation.watchPosition(
                 (position) => {
                     const { latitude, longitude } = position.coords;
+                    currentUserLocation = [latitude, longitude]; // Cập nhật vị trí mới nhất
 
-                    // Cập nhật vị trí của chính bạn trên bản đồ
                     updateMarker(userName, latitude, longitude, true);
 
-                    // Lần đầu lấy được vị trí, di chuyển bản đồ tới đó
                     if (isFirstLocationUpdate) {
-                        map.setView([latitude, longitude], 17);
+                        map.setView(currentUserLocation, 17);
                         isFirstLocationUpdate = false;
                     }
 
-                    // --- PHẦN 3: GỬI VÀ NHẬN DỮ LIỆU (CẦN BACKEND) ---
-                    /*
-                    TRONG MỘT ỨNG DỤNG THỰC TẾ, ĐÂY LÀ LÚC BẠN SẼ:
-                    1. Tạo một đối tượng dữ liệu
-                       const locationData = { id: userName, lat: latitude, lng: longitude };
-                    
-                    2. Gửi dữ liệu này tới WebSocket server
-                       ws.send(JSON.stringify(locationData));
-                    */
+                    // --- PHẦN 3: GỬI VÀ NHẬN DỮ LIỆU ---
+                    /* ... */
                 },
                 (error) => {
                     console.error("Lỗi khi lấy vị trí:", error);
-                    showNotification("Không thể lấy vị trí. Vui lòng kiểm tra quyền truy cập vị trí của trình duyệt.");
+                    showNotification("Không thể lấy vị trí. Vui lòng kiểm tra quyền truy cập vị trí.");
                 }, 
                 {
                     enableHighAccuracy: true,
@@ -174,25 +197,36 @@
         } else {
             showNotification("Trình duyệt của bạn không hỗ trợ định vị.");
         }
+        
+        // --- PHẦN 4: THÊM SỰ KIỆN CHO CÁC NÚT ĐIỀU KHIỂN ---
+
+        // Sự kiện cho nút "Zoom về vị trí của tôi"
+        zoomToMeBtn.addEventListener('click', () => {
+            if (currentUserLocation) {
+                map.setView(currentUserLocation, 17); // Zoom gần
+            } else {
+                showNotification("Chưa có thông tin vị trí của bạn.");
+            }
+        });
+
+        // Sự kiện cho nút "Xem tất cả mọi người"
+        zoomToAllBtn.addEventListener('click', () => {
+            const markerGroup = L.featureGroup(Object.values(markers));
+            if (Object.keys(markers).length > 0) {
+                // Thêm một chút padding để các marker không bị sát viền
+                map.fitBounds(markerGroup.getBounds().pad(0.2));
+            } else {
+                showNotification("Chưa có vị trí của ai trên bản đồ.");
+            }
+        });
+
 
         /*
         TRONG MỘT ỨNG DỤNG THỰC TẾ, BẠN SẼ CÓ MỘT ĐOẠN MÃ NHƯ SAU:
-        
-        const ws = new WebSocket('wss://your-server-address');
-
-        ws.onmessage = (event) => {
-            const friendData = JSON.parse(event.data);
-            const { id, lat, lng } = friendData;
-            if (id !== userName) {
-                updateMarker(id, lat, lng, false);
-            }
-        };
-
-        ws.onopen = () => console.log('Đã kết nối tới server!');
-        ws.onclose = () => console.log('Đã ngắt kết nối với server.');
+        ...
         */
 
-        // --- PHẦN 4: MÔ PHỎNG DỮ LIỆU BẠN BÈ ---
+        // --- PHẦN 5: MÔ PHỎNG DỮ LIỆU BẠN BÈ ---
         function simulateFriends() {
             console.log("Mô phỏng vị trí bạn bè...");
             updateMarker("Anh A", 21.0288, 105.8525, false);
