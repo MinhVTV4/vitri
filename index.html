@@ -127,7 +127,7 @@
     <script type="module">
         // Import các hàm cần thiết từ Firebase SDK
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-        import { getDatabase, ref, onValue, set, onDisconnect, serverTimestamp, remove } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
+        import { getDatabase, ref, onValue, set, onDisconnect, serverTimestamp, remove, update } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 
         // --- PHẦN 1: CẤU HÌNH FIREBASE ---
@@ -200,10 +200,8 @@
         }
 
         function updateMarker(id, userData) {
-            // SỬA LỖI: Thêm bước kiểm tra dữ liệu tọa độ trước khi sử dụng
             if (!userData || typeof userData.lat !== 'number' || typeof userData.lng !== 'number') {
-                // Nếu người dùng này đang offline và không có tọa độ cũ, hãy xóa marker của họ
-                if (userData.status === 'offline') {
+                if (userData && userData.status === 'offline') {
                     removeMarker(id);
                 }
                 console.warn(`Dữ liệu vị trí không đầy đủ cho user ${id}. Bỏ qua cập nhật marker.`);
@@ -331,7 +329,8 @@
                     }
                     
                     const userLocationRef = ref(db, 'locations/' + currentUserId);
-                    await set(userLocationRef, locationData);
+                    // SỬA LỖI: Chuyển từ set() thành update()
+                    await update(userLocationRef, locationData);
                 },
                 (error) => {
                     console.error("Lỗi vị trí:", error);
